@@ -60,7 +60,7 @@ mod pool {
             let relp_contract: RELP = FromAccountId::from_account_id(relp_token);
             let oracle_contract: Oracle = FromAccountId::from_account_id(oracle_addr);
             let instance = Self {
-                elcaim: 1,
+                elcaim: 100,
                 k: 5, //0.00005 * 100000
                 reserve: reserve,
                 risk_reserve: risk_reserve,
