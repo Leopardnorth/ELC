@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(non_snake_case)]
+#![allow(unused_mut)]
 
 pub use self::pool::Pool;
 use ink_lang as ink;
@@ -8,10 +10,14 @@ mod pool {
     use elc::ELC;
     use relp::RELP;
     use oracle::Oracle;
+    use exchange::PatraExchange;
+    use factory::PatraFactory;
     #[cfg(not(feature = "ink-as-dependency"))]
     use ink_env::call::FromAccountId;
     #[cfg(not(feature = "ink-as-dependency"))]
-    use ink_storage::Lazy;
+    use ink_storage::{
+        lazy::Lazy,
+    };
 
     #[ink(storage)]
     pub struct Pool {
@@ -20,9 +26,12 @@ mod pool {
         reserve: Balance,
         risk_reserve: Balance,
         k_update_time: u128,
+        last_expand_time: u128,
+        last_contract_time: u128,
         elc_contract: Lazy<ELC>,
         relp_contract: Lazy<RELP>,
         oracle_contract: Lazy<Oracle>,
+        factory_contract: Lazy<PatraFactory>,
     }
 
     #[ink(event)]
@@ -47,6 +56,22 @@ mod pool {
         elp_amount: Balance,
     }
 
+    #[ink(event)]
+    pub struct ExpandEvent {
+        #[ink(topic)]
+        gaptime: u128,
+        #[ink(topic)]
+        elc_amount: Balance,
+    }
+
+    #[ink(event)]
+    pub struct ContractEvent {
+        #[ink(topic)]
+        gaptime: u128,
+        #[ink(topic)]
+        elp_amount: Balance,
+    }
+
     impl Pool {
         #[ink(constructor)]
         pub fn new(
@@ -55,9 +80,11 @@ mod pool {
             elc_token: AccountId,
             relp_token: AccountId,
             oracle_addr: AccountId,
+            factory_addr: AccountId,
         ) -> Self {
             let elc_contract: ELC = FromAccountId::from_account_id(elc_token);
             let relp_contract: RELP = FromAccountId::from_account_id(relp_token);
+            let elp_contract: ELP = FromAccountId::from_account_id(elp_token);
             let oracle_contract: Oracle = FromAccountId::from_account_id(oracle_addr);
             let instance = Self {
                 elcaim: 100,
@@ -65,9 +92,12 @@ mod pool {
                 reserve: reserve,
                 risk_reserve: risk_reserve,
                 k_update_time: Self::env().block_timestamp().into(),
+                last_expand_time:  k_update_time,
+                last_contract_time:  k_update_time,
                 oracle_contract: Lazy::new(oracle_contract),
                 elc_contract: Lazy::new(elc_contract),
                 relp_contract: Lazy::new(relp_contract),
+                factory_contract: Lazy::new(factory_contract),
             };
             instance
         }
@@ -76,40 +106,52 @@ mod pool {
         #[ink(message, payable)]
         pub fn add_liquidity(&mut self) -> (Balance, Balance) {
             self.update_elc_aim(); //首先更新ELCaim价格
-            let lr = self.liability_ratio(); //计算LR
             let caller: AccountId = self.env().caller();
             let elp_amount: Balance = self.env().transferred_balance();
-            let elp_price: u128 = self.oracle_contract.elp_price();
-            let mut relp_tokens: Balance = 0;
-            let mut elc_tokens: Balance = 0;
-            let mut relp_price = self.relp_price();
-            if lr > 30 {
-                //返回用户relp和 0 ELC
-                let elc_tokens = elp_price * elp_amount * (lr/100000) / relp_price;
+            let (relp_tokens, elc_tokens) = self.compute_liquidity(elp_amount);
+            if elc_tokens != 0 {
                 assert!(self
                     .relp_contract
                     .mint(caller, elc_tokens)
                     .is_ok());
-
-                let relp_tokens = elp_price * elp_amount * (1- lr/100000)/ relp_price;
-                assert!(self
-                    .relp_contract
-                    .mint(caller, relp_tokens)
-                    .is_ok());
-            } else {
-                //返回用户ELC和relp数量
-                let relp_tokens = elp_price * elp_amount / relp_price;
-                assert!(self
-                    .relp_contract
-                    .mint(caller, relp_tokens)
-                    .is_ok());
-            };
+            }
+            assert!(self
+                .relp_contract
+                .mint(caller, relp_tokens)
+                .is_ok());
             self.env().emit_event(AddLiquidity {
                 sender: caller,
                 elp_amount: elp_amount,
                 relp_amount: relp_tokens,
                 elc_amount: elc_tokens,
             });
+            (relp_tokens, elc_tokens)
+        }
+
+        /// compute add-liquidity threshold for internal and external call
+        #[ink(message)]
+        pub fn compute_liquidity(&self, elp_amount_deposit: Balance) -> (Balance, Balance) {
+            let elp_price: u128 = self.oracle_contract.elp_price();
+            let elc_price: u128 = self.oracle_contract.elc_price();
+            let elc_amount: Balance = self.elc_contract.total_supply();
+            let mut relp_tokens: Balance = 0;
+            let mut elc_tokens: Balance = 0;
+            let mut relp_price = self.relp_price();
+            let lr = self.liability_ratio(); //计算LR
+            if lr < 30 {
+                // compute elp amount make LR >= 30
+                let elp_amount_threshold: Balance  = elc_amount * elc_price * 100 / (elp_price * 30);
+                if elp_amount_deposit < elp_amount_threshold {
+                    relp_tokens = elp_price * elp_amount_deposit / relp_price;
+                    elc_tokens = elp_price * elp_amount_deposit * (lr/100000) / relp_price;
+                } else {
+                    relp_tokens = elp_price * elp_amount_threshold / relp_price +
+                        elp_price * (elp_amount_deposit - elp_amount_threshold) * (1- lr/100000)/ relp_price;
+                    elc_tokens = elp_price * elp_amount_threshold * (lr/100000) / relp_price;
+                }
+            } else {
+                relp_tokens = elp_price * elp_amount_deposit * (1- lr/100000)/ relp_price;
+            };
             (relp_tokens, elc_tokens)
         }
 
@@ -161,9 +203,19 @@ mod pool {
         pub fn get_reward(&mut self) -> Balance {
             let caller: AccountId= self.env().caller();
             let relp_amount = self.relp_contract.balance_of(caller);
-            assert!(relp_amount > 0);
-            //返回ELP数量
-            relp_amount
+//            assert!(relp_amount > 0);
+            let now_time: u128 = self.env().block_timestamp().into();
+            let (hold_time, hold_realtime) = self.relp_contract.hold_time(caller, now_time);
+            let hold_time_all: u128 = self.relp_contract.hold_time_all(now_time);
+            //6 seconds per block, every block reward, reward assume reward is 5, decimal is 10^12
+            let elp_amount: u128 = hold_time / hold_time_all * (hold_realtime/6) * 5 * 10^12 ;
+            if self.risk_reserve > 0 {
+                assert!(self.env().transfer(caller, elp_amount).is_ok());
+                self.risk_reserve -= elp_amount;
+            }
+            self.relp_contract.update_hold_time_for_reward(caller, relp_amount, now_time);
+            //return elp amount
+            elp_amount
         }
 
         /// when price lower, call swap contract, swap elc for elp
@@ -173,7 +225,35 @@ mod pool {
             let elc_price: u128 = self.oracle_contract.elc_price();
             let elcaim = self.elcaim;
             assert!(elc_price < elcaim * 98 / 100);
+
             //调用swap，卖出ELC，买入ELP
+            let adj_amount = 100;
+            let elp_contract：AccountID = 0;
+            let exchange_account_id1 = self.factory_contract.get_exchange(elc_contract, elp_contract).unwrap_or(&0);
+            if(exchange_account_id1) != (&0) {
+                let exchange_info = exchange_account_id1.exchange_info;
+                let from_decimals = exchange_info.from_decimals;
+                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
+                assert!(buy_amount);
+            } else {
+                let exchange_account_id2 = self.factory_contract.get_exchange(elp_contract, elc_contract).unwrap_or(&0);
+                assert!((exchange_account_id2) == (&0));
+
+                let exchange_info = exchange_account_id2.exchange_info;
+                let from_decimals = exchange_info.from_decimals;
+                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum);
+                assert!(buy_amount);
+            }
+
+            let last_expand_time = self.expand_time;
+            let gap: u128 = block_time - self.expand_time;
+            self.contract_time = block_time;
+            self.env().emit_event(ExpandEvent {
+                gaptime: gap,
+                elc_amount: adj_amount,
+            }
         }
 
         /// when price higher, call swap contract, swap elp for elc
@@ -183,6 +263,33 @@ mod pool {
             let elcaim = self.elcaim;
             assert!(elc_price > elcaim * 102 / 100);
             //调用swap，卖出ELP，买入ELC
+            let adj_amount = 20;
+            let elp_contract：AccountID = 0;
+            let exchange_account_id1 = self.factory_contract.get_exchange(elp_contract, elc_contract).unwrap_or(&0);
+            if(exchange_account_id1) != (&0) {
+                let exchange_info = exchange_account_id1.exchange_info;
+                let from_decimals = exchange_info.from_decimals;
+                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
+                assert!(buy_amount);
+            } else {
+                let exchange_account_id2 = self.factory_contract.get_exchange(elc_contract, elp_contract).unwrap_or(&0);
+                assert!((exchange_account_id2) == (&0));
+
+                let exchange_info = exchange_account_id2.exchange_info;   
+                let from_decimals = exchange_info.from_decimals;  
+                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum); 
+                assert!(buy_amount);
+            }
+            
+            let last_contract_time = self.contract_time;
+            let gap: u128 = block_time - self.contract_time;
+            self.contract_time = block_time;
+            self.env().emit_event(ContractEvent {
+                gaptime: gap,
+                elp_amount: adj_amount,
+            }
         }
 
         ///计算通胀因子，如果通胀因子变动要更新, 出块速度为6秒/块，每隔10000个块将ELC目标价格调升K
@@ -224,5 +331,11 @@ mod pool {
 
         #[ink(message)]
         pub fn elp_risk_reserve(&self) -> Balance { self.risk_reserve }
+
+        /// define a struct returns all pool states
+        #[ink(message)]
+        pub fn pool_state(&self)  {
+
+        }
     }
 }
