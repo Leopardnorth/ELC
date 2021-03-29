@@ -232,9 +232,9 @@ mod pool {
             let exchange_account_id1 = self.factory_contract.get_exchange(elc_contract, elp_contract).unwrap_or(&0);
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
-                let from_decimals = exchange_info.from_decimals;
+                let token_decimals = exchange_info.from_decimals;
                 let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(from_decimals));
+                let adj_bignum = adj_amount * (base.pow(token_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             } else {
@@ -242,10 +242,10 @@ mod pool {
                 assert!((exchange_account_id2) == (&0));
 
                 let exchange_info = exchange_account_id2.exchange_info;
-                let from_decimals = exchange_info.from_decimals;
+                let token_decimals = exchange_info.to_decimals;
                 let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(from_decimals));
-                let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum);
+                let adj_bignum = adj_amount * (base.pow(token_decimals));
+                let buy_amount = exchange_account_id2.swap_to_from_input(adj_bignum);
                 assert!(buy_amount);
             }
 
@@ -270,9 +270,9 @@ mod pool {
             let exchange_account_id1 = self.factory_contract.get_exchange(elp_contract, elc_contract).unwrap_or(&0);
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
-                let from_decimals = exchange_info.from_decimals;
+                let token_decimals = exchange_info.from_decimals;
                 let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(from_decimals));
+                let adj_bignum = adj_amount * (base.pow(token_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             } else {
@@ -280,10 +280,10 @@ mod pool {
                 assert!((exchange_account_id2) == (&0));
 
                 let exchange_info = exchange_account_id2.exchange_info;   
-                let from_decimals = exchange_info.from_decimals;  
+                let token_decimals = exchange_info.to_decimals;  
                 let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(from_decimals));
-                let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum); 
+                let adj_bignum = adj_amount * (base.pow(token_decimals));
+                let buy_amount = exchange_account_id2.swap_to_from_input(adj_bignum); 
                 assert!(buy_amount);
             }
 
