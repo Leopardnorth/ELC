@@ -84,8 +84,8 @@ mod pool {
         ) -> Self {
             let elc_contract: ELC = FromAccountId::from_account_id(elc_token);
             let relp_contract: RELP = FromAccountId::from_account_id(relp_token);
-            let elp_contract: ELP = FromAccountId::from_account_id(elp_token);
             let oracle_contract: Oracle = FromAccountId::from_account_id(oracle_addr);
+            let factory_contract: PatraFactory = FromAccountId::from_account_id(factory_addr);
             let instance = Self {
                 elcaim: 100,
                 k: 5, //0.00005 * 100000
@@ -233,7 +233,8 @@ mod pool {
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let base u128 = 10;
+                let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             } else {
@@ -242,7 +243,8 @@ mod pool {
 
                 let exchange_info = exchange_account_id2.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let base u128 = 10;
+                let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             }
@@ -269,7 +271,8 @@ mod pool {
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let base u128 = 10;
+                let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             } else {
@@ -278,11 +281,12 @@ mod pool {
 
                 let exchange_info = exchange_account_id2.exchange_info;   
                 let from_decimals = exchange_info.from_decimals;  
-                let adj_bignum = adj_amount * (10 ** from_decimals);
+                let base u128 = 10;
+                let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum); 
                 assert!(buy_amount);
             }
-            
+
             let last_contract_time = self.contract_time;
             let gap: u128 = block_time - self.contract_time;
             self.contract_time = block_time;
