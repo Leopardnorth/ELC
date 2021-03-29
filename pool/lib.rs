@@ -233,7 +233,7 @@ mod pool {
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let base u128 = 10;
+                let base: u128 = 10;
                 let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
@@ -243,15 +243,15 @@ mod pool {
 
                 let exchange_info = exchange_account_id2.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let base u128 = 10;
+                let base: u128 = 10;
                 let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
             }
 
-            let last_expand_time = self.expand_time;
-            let gap: u128 = block_time - self.expand_time;
-            self.contract_time = block_time;
+            let block_time:u128 = self.env().block_timestamp().into();
+            let gap: u128 = block_time - self.last_expand_time;
+            self.last_expand_time = block_time;
             self.env().emit_event(ExpandEvent {
                 gaptime: gap,
                 elc_amount: adj_amount,
@@ -271,7 +271,7 @@ mod pool {
             if(exchange_account_id1) != (&0) {
                 let exchange_info = exchange_account_id1.exchange_info;
                 let from_decimals = exchange_info.from_decimals;
-                let base u128 = 10;
+                let base: u128 = 10;
                 let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id1.swap_from_to_input(adj_bignum);
                 assert!(buy_amount);
@@ -281,15 +281,15 @@ mod pool {
 
                 let exchange_info = exchange_account_id2.exchange_info;   
                 let from_decimals = exchange_info.from_decimals;  
-                let base u128 = 10;
+                let base: u128 = 10;
                 let adj_bignum = adj_amount * (base.pow(from_decimals));
                 let buy_amount = exchange_account_id2.swap_from_to_input(adj_bignum); 
                 assert!(buy_amount);
             }
 
-            let last_contract_time = self.contract_time;
-            let gap: u128 = block_time - self.contract_time;
-            self.contract_time = block_time;
+            let block_time:u128 = self.env().block_timestamp().into();
+            let gap: u128 = block_time - self.last_contract_time;
+            self.last_contract_time = block_time;
             self.env().emit_event(ContractEvent {
                 gaptime: gap,
                 elp_amount: adj_amount,
