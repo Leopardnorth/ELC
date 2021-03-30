@@ -10,7 +10,7 @@ mod pool {
     use elc::ELC;
     use relp::RELP;
     use oracle::Oracle;
-    use exchange::PatraExchange;
+    use exchange::PatraExchange2;
     use factory::PatraFactory;
     #[cfg(not(feature = "ink-as-dependency"))]
     use ink_env::call::FromAccountId;
@@ -230,16 +230,16 @@ mod pool {
             let adj_amount = 100;
             let to_token = Default::default();
             let exchange_account_id = self.factory_contract.get_exchange(elc_contract, to_token).unwrap_or(&0);
-            if(exchange_account_id) != (&0) {
-                let exchange_info = exchange_account_id.exchange_info();
-                let token_decimals = exchange_info.from_decimals;
-                let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(token_decimals));
-                let sold_amount = swap_token_to_dot_input(adj_bignum);
-                assert!(sold_amount);
-                let buy_amount = swap_token_to_dot_output(sold_amount);
-                assert!(buy_amount);
-            }
+            assert!((exchange_account_id) != (&0));
+
+            let exchange_info = exchange_account_id.exchange_info();
+            let token_decimals = exchange_info.from_decimals;
+            let base: u128 = 10;
+            let adj_bignum = adj_amount * (base.pow(token_decimals));
+            let sold_amount = exchange_account_id.swap_token_to_dot_input(adj_bignum);
+            assert!(sold_amount);
+            let buy_amount = exchange_account_id.swap_token_to_dot_output(sold_amount);
+            assert!(buy_amount);
 
             let block_time:u128 = self.env().block_timestamp().into();
             let gap: u128 = block_time - self.last_expand_time;
@@ -256,20 +256,20 @@ mod pool {
             let elc_price: u128 = self.oracle_contract.elc_price();
             let elcaim = self.elcaim;
             assert!(elc_price > elcaim * 102 / 100);
+
             //调用swap，卖出ELP，买入ELC
             let adj_amount = 20;
             let to_token = Default::default();
             let exchange_account_id = self.factory_contract.get_exchange(elc_contract, to_token).unwrap_or(&0);
-            if(exchange_account_id) != (&0) {
-                let exchange_info = exchange_account_id.exchange_info();
-                let token_decimals = exchange_info.to_decimals;
-                let base: u128 = 10;
-                let adj_bignum = adj_amount * (base.pow(token_decimals));
-                let sold_amount = swap_dot_to_token_input(adj_bignum);
-                assert!(sold_amount);
-                let buy_amount = swap_dot_to_token_output(sold_amount);
-                assert!(buy_amount);
-            } 
+            assert!((exchange_account_id) != (&0))
+            let exchange_info = exchange_account_id.exchange_info();
+            let token_decimals = exchange_info.to_decimals;
+            let base: u128 = 10;
+            let adj_bignum = adj_amount * (base.pow(token_decimals));
+            let sold_amount = exchange_account_id.swap_dot_to_token_input(adj_bignum);
+            assert!(sold_amount);
+            let buy_amount = exchange_account_id.swap_dot_to_token_output(sold_amount);
+            assert!(buy_amount);
 
             let block_time:u128 = self.env().block_timestamp().into();
             let gap: u128 = block_time - self.last_contract_time;
