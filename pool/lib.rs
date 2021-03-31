@@ -14,6 +14,7 @@ mod pool {
     use factory::PatraFactory;
     #[cfg(not(feature = "ink-as-dependency"))]
     use ink_env::call::FromAccountId;
+    use ink_prelude::vec::Vec;
     #[cfg(not(feature = "ink-as-dependency"))]
     use ink_storage::{
         lazy::Lazy,
