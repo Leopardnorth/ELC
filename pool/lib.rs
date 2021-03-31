@@ -29,8 +29,8 @@ mod pool {
         k_update_time: u128,
         last_expand_time: u128,
         last_contract_time: u128,
-        expand_adj_amount: u128,
-        contract_adj_amount: u128,
+        expand_adj_num: u128,
+        contract_adj_num: u128,
         expand_gap: Vec<OpGap>,
         contract_gap: Vec<OpGap>,
         elc_contract: Lazy<ELC>,
@@ -102,8 +102,8 @@ mod pool {
                 k_update_time: Self::env().block_timestamp().into(),
                 last_expand_time:  k_update_time,
                 last_contract_time:  k_update_time,
-                expand_adj_amount: 100,  //around 100 $
-                contract_adj_amount: 5,
+                expand_adj_num: 100,  //around 100 $
+                contract_adj_num: 5,
                 expand_gap: Vec::new(),
                 contract_gap: Vec::new(),
                 oracle_contract: Lazy::new(oracle_contract),
@@ -249,8 +249,8 @@ mod pool {
             let exchange_info: ExchangeInfo = self.exchange_contract.exchange_info();
             let token_decimals = exchange_info.from_decimals;
             let base: u128 = 10;
-            let adj_amount = self.expand_adj_amount;
-            let adj_bignum = adj_amount * (base.pow(token_decimals));
+            let adj_num = self.expand_adj_num;
+            let adj_bignum = adj_num * (base.pow(token_decimals));
             let sold_amount = self.exchange_contract.swap_token_to_dot_input(adj_bignum);
             assert!(sold_amount);
             let buy_amount = self.exchange_contract.swap_token_to_dot_output(sold_amount);
@@ -259,15 +259,15 @@ mod pool {
             let block_time:u128 = self.env().block_timestamp().into();
             let gap: u128 = block_time - self.last_expand_time;
             self.last_expand_time = block_time;
-            self.expand_gap.push((gap, adj_amount));
+            self.expand_gap.push((gap, adj_bignum));
             self.env().emit_event(ExpandEvent {
                 gaptime: gap,
-                elc_amount: adj_amount,
+                elc_amount: adj_bignum,
             }
         }
 
         /// when price higher, call swap contract, swap elp for elc
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn contract_elc(&mut self){
             let elc_price: u128 = self.oracle_contract.elc_price();
             let elcaim = self.elcaim;
@@ -283,8 +283,13 @@ mod pool {
             let exchange_info: ExchangeInfo = self.exchange_contract.exchange_info();
             let token_decimals = exchange_info.to_decimals;
             let base: u128 = 10;
-            let adj_amount = self.contract_adj_amount;
-            let adj_bignum = adj_amount * (base.pow(token_decimals));
+            let adj_num = self.contract_adj_num;
+            let adj_bignum = adj_num * (base.pow(token_decimals));
+
+            let send_amount: Balance = self.env().transferred_balance();
+            ///判断符合小量交易
+            assert!((send_amount > 0) && (send_amount <= adj_bignum));
+
             let sold_amount = self.exchange_contract.swap_dot_to_token_input();
             assert!(sold_amount);
             let buy_amount = self.exchange_contract.swap_dot_to_token_output(sold_amount);
@@ -293,25 +298,25 @@ mod pool {
             let block_time:u128 = self.env().block_timestamp().into();
             let gap: u128 = block_time - self.last_contract_time;
             self.last_contract_time = block_time;
-            self.contract_gap.push((gap, adj_amount));
+            self.contract_gap.push((gap, send_amount));
             self.env().emit_event(ContractEvent {
                 gaptime: gap,
-                elp_amount: adj_amount,
+                elp_amount: send_amount,
             }
         }
 
         ///设置扩张操作时每次小量交易的数值
         #[ink(message)]
-        pub fn update_expand_adj(&mut self, expand_adj_amount: u128) {
-            assert!(expand_adj_amount > 1);
-            self.expand_adj_amount = expand_adj_amount;
+        pub fn update_expand_adj(&mut self, expand_adj_num: u128) {
+            assert!(expand_adj_num > 0);
+            self.expand_adj_num = expand_adj_num;
         }
 
         ///设置收缩操作时每次小量交易的数值
         #[ink(message)]
-        pub fn update_contract_adj(&mut self, contract_adj_amount: u128) {
-            assert!(contract_adj_amount > 1);
-            self.contract_adj_amount = contract_adj_amount;
+        pub fn update_contract_adj(&mut self, contract_adj_num: u128) {
+            assert!(contract_adj_num > 0);
+            self.contract_adj_num = contract_adj_num;
         }
 
         ///计算通胀因子，如果通胀因子变动要更新, 出块速度为6秒/块，每隔10000个块将ELC目标价格调升K
