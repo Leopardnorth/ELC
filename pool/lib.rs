@@ -302,14 +302,14 @@ mod pool {
 
         ///设置扩张操作时每次小量交易的数值
         #[ink(message)]
-        pub fn update_expand_adj(&mut self,expand_adj_amount: u128) {
+        pub fn update_expand_adj(&mut self, expand_adj_amount: u128) {
             assert!(expand_adj_amount > 1);
             self.expand_adj_amount = expand_adj_amount;
         }
 
         ///设置收缩操作时每次小量交易的数值
         #[ink(message)]
-        pub fn update_contract_adj(&mut self,contract_adj_amount: u128) {
+        pub fn update_contract_adj(&mut self, contract_adj_amount: u128) {
             assert!(contract_adj_amount > 1);
             self.contract_adj_amount = contract_adj_amount;
         }
