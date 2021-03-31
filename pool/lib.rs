@@ -250,9 +250,9 @@ mod pool {
             let base: u128 = 10;
             let adj_amount = self.expand_adj_amount;
             let adj_bignum = adj_amount * (base.pow(token_decimals));
-            let sold_amount = exchange_account_id.swap_token_to_dot_input(adj_bignum);
+            let sold_amount = self.exchange_contract.swap_token_to_dot_input(adj_bignum);
             assert!(sold_amount);
-            let buy_amount = exchange_account_id.swap_token_to_dot_output(sold_amount);
+            let buy_amount = self.exchange_contract.swap_token_to_dot_output(sold_amount);
             assert!(buy_amount);
 
             let block_time:u128 = self.env().block_timestamp().into();
@@ -284,9 +284,9 @@ mod pool {
             let base: u128 = 10;
             let adj_amount = self.contract_adj_amount;
             let adj_bignum = adj_amount * (base.pow(token_decimals));
-            let sold_amount = exchange_account_id.swap_dot_to_token_input(adj_bignum);
+            let sold_amount = self.exchange_contract.swap_dot_to_token_input(adj_bignum);
             assert!(sold_amount);
-            let buy_amount = exchange_account_id.swap_dot_to_token_output(sold_amount);
+            let buy_amount = self.exchange_contract.swap_dot_to_token_output(sold_amount);
             assert!(buy_amount);
 
             let block_time:u128 = self.env().block_timestamp().into();
