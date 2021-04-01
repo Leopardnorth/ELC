@@ -231,13 +231,13 @@ mod pool {
             elp_amount
         }
 
-        /// when price lower, call swap contract, swap elc for elp
+        /// when price higher, call swap contract, swap elp for elc
         /// note: 扩张，swap选择交易所待定，提供给外部做市商调用，保证每次小量交易, 记录时间间隔
         #[ink(message)]
         pub fn expand_elc(&mut self) {
             let elc_price: u128 = self.oracle_contract.elc_price();
             let elcaim = self.elcaim;
-            assert!(elc_price < elcaim * 98 / 100);
+            assert!(elc_price > elcaim * 102 / 100);
 
             //调用swap，卖出ELC，买入ELP
             if(self.exchange_contract == (&0)) {
@@ -264,14 +264,18 @@ mod pool {
                 gaptime: gap,
                 elc_amount: adj_bignum,
             }
+
+            ///zengfa
+
+
         }
 
-        /// when price higher, call swap contract, swap elp for elc
+        /// when price lower, call swap contract, swap elc for elp
         #[ink(message, payable)]
         pub fn contract_elc(&mut self){
             let elc_price: u128 = self.oracle_contract.elc_price();
             let elcaim = self.elcaim;
-            assert!(elc_price > elcaim * 102 / 100);
+            assert!(elc_price < elcaim * 98 / 100);
 
             //调用swap，卖出ELP，买入ELC
             if(self.exchange_contract == (&0)) {
@@ -290,18 +294,49 @@ mod pool {
             ///判断符合小量交易
             assert!((send_amount > 0) && (send_amount <= adj_bignum));
 
-            let sold_amount = self.exchange_contract.swap_dot_to_token_input();
-            assert!(sold_amount);
-            let buy_amount = self.exchange_contract.swap_dot_to_token_output(sold_amount);
-            assert!(buy_amount);
 
             let block_time:u128 = self.env().block_timestamp().into();
-            let gap: u128 = block_time - self.last_contract_time;
-            self.last_contract_time = block_time;
-            self.contract_gap.push((gap, send_amount));
-            self.env().emit_event(ContractEvent {
-                gaptime: gap,
-                elp_amount: send_amount,
+
+            ///风险储备足够
+            if(send_amount <= self.risk_reserve){
+                let sold_amount = self.exchange_contract.swap_dot_to_token_input();
+                assert!(sold_amount);
+                let buy_amount = self.exchange_contract.swap_dot_to_token_output(sold_amount);
+                assert!(buy_amount);
+
+                self.risk_reserve -= send_amount;
+                let gap: u128 = block_time - self.last_contract_time;
+                self.last_contract_time = block_time;
+                self.contract_gap.push((gap, send_amount));
+                self.env().emit_event(ContractEvent {
+                    gaptime: gap,
+                    elp_amount: send_amount,
+                }
+            } else {
+                ///一天内限制使用储备的2%
+                if(self.start_tp > block_time - 86400000) {
+                    assert!((self.day_used_reserve + send_amount - self.risk_reserve) <= (reserve * 2 / 100));
+                    self.start_tp = block_time;
+                    self.day_used_reserve += send_amount - self.risk_reserve;
+
+                } else {
+                    let sold_amount = self.exchange_contract.swap_dot_to_token_input();
+                    assert!(sold_amount);
+                    let buy_amount = self.exchange_contract.swap_dot_to_token_output(sold_amount);
+                    assert!(buy_amount);
+
+                    self.reserve -= send_amount - self.risk_reserve;
+                    self.risk_reserve = 0;
+                    self.start_tp = block_time;
+                    let gap: u128 = block_time - self.last_contract_time;
+                    self.last_contract_time = block_time;
+                    self.contract_gap.push((gap, send_amount));
+                    self.env().emit_event(ContractEvent {
+                    gaptime: gap,
+                    elp_amount: send_amount,
+
+                }
+                assert!((self.day_used_reserve + send_amount) < reserve * 2 / 100)
             }
         }
 
